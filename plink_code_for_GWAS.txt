@@ -1,0 +1,17 @@
+cd C:\Users\11780\Downloads\plink-1.07-dos
+plink --bfile GENOTYPE_hg19 --update-ids update-id.txt --make-bed --out affy6 --noweb
+plink --bfile affy6 --update-alleles update-alleles.txt --make-bed --out affy6-alleles --noweb
+plink --bfile affy6-alleles --update-map update-marker.txt --update-name --make-bed --out affy6-allele-rsid --noweb
+plink --bfile affy6-allele-rsid --update-sex update_sex.txt --make-bed --out affy6-sex --noweb
+plink --bfile affy6-sex --mind 0.01 --maf 0.05 --hwe 0.001 --noweb --make-bed --out affy6-cleaned
+plink --bfile affy6-cleaned --pheno update_phenotype.txt --pheno-name MD --assoc(covariate) --noweb --out association1
+plink --bfile affy6-sex --assoc --pheno update_phenotype.txt --pheno-name MD --out association1 --noweb
+plink --bfile affy6-sex --pheno update_phenotype.txt --pheno-name MD --assoc --adjust --noweb --out association2
+plink --bfile affy6-sex --model --snp rs4776489 --cell 0 --out mod1 --noweb
+plink --bfile affy6-sex --pheno update_phenotype.txt --pheno-name MD --cluster --mc 2 --ppc 0.05 --noweb --out stratification1
+plink --bfile affy6-sex --pheno update_phenotype.txt --pheno-name MD --mh --within stratification1.cluster2 --adjust --out aac1 --noweb
+plink --bfile affy6-sex --pheno update_phenotype.txt --pheno-name MD  --cluster --cc --ppc 0.01 --out stratification2 --noweb
+plink --bfile affy6-sex --pheno update_phenotype.txt --pheno-name MD --mh --within stratification2.cluster2 --adjust --out aac2 --noweb
+plink --bfile affy6-sex --pheno update_phenotype.txt --pheno-name MD  --cluster --K 2 --out stratification3 --noweb
+plink --bfile affy6-sex --pheno update_phenotype.txt --pheno-name MD --mh --within stratification3.cluster2 --adjust --out aac3 --noweb
+plink --bfile affy6-sex --pheno update_phenotype.txt --pheno-name MD --logistic --out aac3 --noweb

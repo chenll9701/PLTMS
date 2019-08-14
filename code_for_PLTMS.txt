@@ -1,0 +1,158 @@
+#PTLMS#
+##step 1##
+setwd('C:\\Users\\11780\\Documents\\R”Ô—‘¡∑œ∞\\PLTMS')
+sample_info=read.table('sample_info.txt', sep='\t',header=T)
+diabetes=read.csv('diabetes_info.csv', header=T)
+diabetes2=diabetes[match(sample_info$Patient_ID, diabetes$Patient_ID),]
+sample=cbind(sample_info, diabetes2)
+dim(sample[which(sample$Diabetes==1),])
+dim(sample[which(sample$Diabetes==2),])
+sample$PLTMS=NA
+sample$PLTMS[which(sample$Diabetes==1)]='control'
+sample$PLTMS[which(sample$Diabetes==2)]='case'
+write.csv(sample,'sample_info.csv', row.names=F)
+idtrans=read.table('idtrans.txt', as.is=T)
+idtrans$V1=gsub(idtrans$V1, pattern='G', replacement='')
+sample$Patient_ID = as.character(sample$Patient_ID)
+idtrans2=idtrans[match(sample$Patient_ID, idtrans$V1),]
+sample2=cbind(sample, idtrans2)
+write.csv(sample2,'sample_info_idtrans.csv',row.names=F)
+
+##step 2##
+setwd('C:\\Users\\11780\\Documents\\R”Ô—‘¡∑œ∞\\PLTMS')
+sample=read.csv('sample_info_idtrans.csv')
+sample=sample[which(!is.na(sample$sample_id)),]
+table(sample$PLTMS)
+pheno=read.table('update_phenotype.txt',header=T)
+pheno2=pheno[match(sample$Patient_ID, pheno$FID),]
+pheno2$MD <- sample$PLTMS
+pheno2$MD=gsub(pheno2$MD, pattern='case', replacement=2) #in plink, 2 represents affected
+pheno2$MD=gsub(pheno2$MD, pattern='control', replacement=1)  # 1 represents unaffected
+pheno2$MD[which(is.na(pheno2$MD))]=0 # 0 represents missing
+write.table(pheno2, 'update_phenotype2.txt', row.names=F)
+
+##step 3##
+setwd('C:\\Users\\11780\\Documents\\R”Ô—‘¡∑œ∞\\PLTMS')
+assoc=read.table('C:\\Users\\11780\\Downloads\\plink-1.07-dos\\association1.assoc',header=T)
+write.csv(assoc,'diabetes_assoc_OR.csv',row.names=F)
+adj=read.table('C:\\Users\\11780\\Downloads\\plink-1.07-dos\\association1.assoc.adjusted',header=T)
+write.csv(adj, 'diabetes_assoc_adj.csv',row.names=F)
+
+##step 4##
+rm(list=ls())
+setwd('C:\\Users\\11780\\Documents\\R”Ô—‘¡∑œ∞\\PLTMS')
+expr=read.table("GeneExpression_Normalized.txt",header=T)
+sample=read.csv('sample_lipid_idtrans.csv')
+sample <- sample[,c(1,3,4,7,8)]
+colnames(sample) <- c('Patient_ID','sex','age','PLTMS','sample_id')
+expr[1:5,1:5]
+expr=expr[,-2]
+expr=expr[match(sample$sample_id,expr$FID),]
+expr=expr[which(!is.na(expr$FID)),]
+for ( i in 1:length(expr$FID)) {
+	expr$FID[i]=paste('G',expr$FID[i],sep='')
+	}
+cols = expr$FID
+expr = t(as.matrix(expr[,c(2:ncol(expr))]))
+expr=expr[-1,]
+expr=expr[-1,]
+colnames(expr)=cols
+library(limma)
+design <- model.matrix(~0+factor(sample$PLTMS)+factor(sample$sex)+factor(sample$age))
+colnames(design)[1:2] = c('case','control')
+colnames(design)[3:27]=LETTERS[1:25]
+rownames(design) = colnames(expr)
+contrast.matrix <- makeContrasts('case-control','control-case',levels=design)
+fit <- lmFit(expr, design)
+fit2 <- contrasts.fit(fit, contrasts=contrast.matrix)
+fit2 <- eBayes(fit2)
+nrDEG = topTable ( fit2, coef = 1, n=Inf)
+write.csv( nrDEG,'nrDEG.csv' )
+
+##step 5##
+###Plotting heat map### 
+setwd('C:\\Users\\11780\\Documents\\R”Ô—‘¡∑œ∞\\PLTMS')
+expr=read.csv('gene_expr.csv', header=T)
+cols=colnames(expr)[-1]
+rows=expr$X
+expr=as.matrix(expr[,2:ncol(expr)])
+colnames(expr)=cols
+rownames(expr)=rows
+sample=read.csv('sample_info_idtrans.csv')
+sample=sample[which(!is.na(sample$sample_id)),]
+sample=sample[which(!is.na(sample$PLTMS)),]
+group=sample$PLTMS
+library(pheatmap)
+{
+  choose_matrix = t(scale(t(expr)))
+  annotation_col = data.frame(CellType=factor(group))
+  rownames( annotation_col) = colnames(expr)
+  pheatmap( fontsize=2, choose_matrix[1:100,], annotation_col = annotation_col, show_rownames=T,
+            annotation_legend=T, filename="heatmap_pltms.png")
+}  
+###END###
+###volcano plot###
+library(ggplot2)
+####logFC_cutoff <- with( nrDEG, mean( abs(logFC))+2*sd(abs(logFC)))
+logFC_cutoff = 1
+{
+  nrDEG$change = as.factor(ifelse(nrDEG$P.Value < 0.05 & abs(nrDEG$logFC) > logFC_cutoff, 
+                             ifelse(nrDEG$logFC > logFC_cutoff, "UP", "DOWN"), "NOT"))
+  this_title <- paste0("Cutoff for logFC is ", round(logFC_cutoff, 3),
+                       "\nThe number of up gene is ", nrow(nrDEG[nrDEG$change == "UP",]),
+					   "\nThe number of down gene is ", nrow(nrDEG[nrDEG$change == "DOWN",]))
+  volcano = ggplot(data=nrDEG, aes(x= logFC, y= -log10(P.Value), color=change))+
+                   geom_point(alpha = 0.4, size=1.75) +
+				   theme_set(theme_set(theme_bw(base_size = 15)))+
+				   xlab("log2 fold change")+ylab("-log10 p-value")+
+				   ggtitle(this_title)+theme(plot.title = element_text(size=15, hjust=0.5))+
+				   scale_colour_manual(values=c("blue","black", "red"))
+  print(volcano)
+  ggsave(volcano, filename="volcano_pltms.png")
+  dev.off()
+}
+up=nrDEG[which(nrDEG$change == 'UP'),]
+down=nrDEG[which(nrDEG$change == 'DOWN'),]
+res=rbind(up,down)
+write.csv(res,'DE_results.csv', row.names=F)
+
+###END###
+
+##step 6##
+###manhattan plot and QQ plot### 
+setwd('C:\\Users\\11780\\Documents\\R”Ô—‘¡∑œ∞\\PLTMS')
+library(qqman)
+data=read.csv('diabetes_assoc_OR.csv',header=T)
+data2=data[which(data$CHR <=22 & data$CHR > 0),]
+png('DM_man.png')
+manhattan(data2, chr="CHR", bp="BP", p="P",snp="SNP",ylim=c(0,8))
+dev.off()
+png('DM_qq.png')
+qq(data2$P)
+dev.off()
+p_value=data2$P
+z = qnorm(p_value/ 2)
+lambda = round(median(z^2, na.rm = TRUE) / 0.454, 3) ####lambda is 1.112
+
+##step 7##
+setwd('C:\\Users\\11780\\Documents\\R”Ô—‘¡∑œ∞\\PLTMS')
+nrDEG=read.csv('normalized-array-adj-agesex-limma.csv', header=T)
+library(ggplot2)
+####logFC_cutoff <- with( nrDEG, mean( abs(logFC))+2*sd(abs(logFC)))
+logFC_cutoff = 1
+{
+  nrDEG$change = as.factor(ifelse(nrDEG$P.Value < 0.5 & abs(nrDEG$logFC) > logFC_cutoff, 
+                             ifelse(nrDEG$logFC > logFC_cutoff, "UP", "DOWN"), "NOT"))
+  this_title <- paste0("Cutoff for logFC is ", round(logFC_cutoff, 3),
+                       "\nThe number of up gene is ", nrow(nrDEG[nrDEG$change == "UP",]),
+					   "\nThe number of down gene is", nrow(nrDEG[nrDEG$change == "DOWN",]))
+  volcano = ggplot(data=nrDEG, aes(x= logFC, y= -log10(P.Value), color=change))+
+                   geom_point(alpha = 0.4, size=1.75) +
+				   theme_set(theme_set(theme_bw(base_size = 15)))+
+				   xlab("log2 fold change")+ylab("-log10 p-value")+
+				   ggtitle(this_title)+theme(plot.title = element_text(size=15, hjust=0.5))+
+				   scale_colour_manual(values=c("blue","black", "red"))
+  print(volcano)
+  ggsave(volcano, filename="volcano_original.png")
+  dev.off()
+}

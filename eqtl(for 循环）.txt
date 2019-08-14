@@ -1,0 +1,174 @@
+source("https://bioconductor.org/biocLite.R")
+biocLite("GENESIS")
+ls=c("marker","cor", "Pvalue")
+SNP=data[,2:13]
+Expression=data[,14:ncol(data)]
+for (i in 1:ncol(SNP)) { 
+for (j in 1:ncol(Expression)) {
+w=paste(colnames(SNP)[i],":",colnames(Expression)[j])
+x=cor(SNP[,i], Expression[,j])
+y=cor.test(SNP[,i], Expression[,j])
+z=c(w,x,y)
+ls=rbind(ls,z)}
+}
+##polygenic risk score
+setwd("C:\\Users\\11780\\Documents\\eqtl")
+topsnp=read.csv("asian_final.csv")
+chr=read.csv("chr.csv")
+trans=read.csv("snp_trans.csv")
+x1=colnames(chr)
+trans1=trans[match(x1[-1],trans[,3]),]
+colnames(chr)=c("id",as.character(trans1[,2]))
+###write.csv(chr,"chr_snp",row.names=F)
+topsnp1=topsnp[match(colnames(chr)[-1],topsnp$rsid),]
+y=c("Beta",topsnp1[,13])
+chr=rbind(chr,y)
+prs=c("id","prs")
+id=chr[,1]
+Beta=as.matrix(chr[dim(chr)[1],])
+##for (i  in 2:length(chr[dim(chr)[1],])) {
+##ifelse(is.na(or[i]), or[i] <-  1000000, or[i] <- or[i])
+##}
+##for (i  in 2:length(chr[dim(chr)[1],])) {
+##ifelse((as.numeric(or[i]))==0, or[i] <-  -10, or[i] <- log(as.numeric(or[i])))
+##}
+chr=rbind(chr,c("Beta",Beta[-1]))
+##write.csv(chr, "chr_or.csv", row.names=F)
+z=0
+for (i in 1:length(id)) {
+for (j in 2:length(chr[i,])) {
+for (k in 2:length(Beta)) { 
+ifelse( j==k, ifelse(!is.na(as.matrix(chr[i,])[j]), 
+ifelse(!is.na(Beta[k]),a <- as.numeric((as.matrix(chr[i,])[j]))*as.numeric(Beta[k]), a <- 0),a <- 0),a <- 0) 
+### 0 is wild homozygote, 1 is heterozygote, 2 is mutated homozygote 
+z=z+a
+}
+}
+w=c(id[i],z)
+prs=rbind(prs,w)
+}
+write.csv(prs,"prs.csv", row.names=F) ###remember to delete V1 and V2 in the sheet
+pheno=read.table("update_phenotype.txt",header=T)
+prs=read.csv("final_snp_MD.csv")
+pheno=pheno[match(prs$id,pheno$FID),]
+MD=pheno$MD
+prs=cbind(prs,MD)
+prs=prs[which(!is.na(prs$MD)),]
+x1=prs[which(prs$MD==1),] ## 1 represents control
+x2=prs[which(prs$MD==2),] ## 2 represents case
+setwd("C:\\Users\\11780\\Documents\\eqtl")
+library(ggplot2)
+library(ggpubr)
+PRS=read.csv("sample_info_snp.csv")
+PRS=PRS[which(!is.na(PRS$pseudo5)),]
+PRS$group=NA
+PRS$group[which(PRS$pseudo5==1)]="NMD"
+PRS$group[which(PRS$pseudo5==2)]="MD"
+plot.gScores = data.frame(PRS)
+plot.gScores$group = PRS$group
+myComparison = list(c('MD', 'NMD'))
+t.test(x=plot.gScores$gScore[which(plot.gScores$group=='MD')], y=plot.gScores$gScore[which(plot.gScores$group=='NMD')])
+pdf('polygenic-scores-validation(27snps).pdf')
+print(ggplot(plot.gScores, aes(group, gScore)) + geom_boxplot(aes(group = group))+ ylab('score') + ggtitle("SNP polygenic risk scores by group")+ stat_compare_means(comparisons=myComparison, method='t.test'))
+dev.off()
+setwd("C:\\Users\\11780\\Documents\\eqtl")
+PRS=read.csv("sample_info_snp.csv")
+PRS=PRS[which(!is.na(PRS$pseudo5)),]
+PRS$group=NA
+PRS$group[which(PRS$pseudo5==1)]="NMD"
+PRS$group[which(PRS$pseudo5==2)]="MD"
+library(pROC)
+library(ggplot2)
+##myROC = roc(response=PRS$group, predictor=PRS$gScore)
+##myROC
+##pdf('dr-19mirnas-roc-lfc.pdf')
+##plot.roc(x=PRS$group, predictor=PRS$gScore, print.thres=T, print.auc=T, ci=T, ci.type='s', of='sp')
+##dev.off()
+##myAUCs = {}
+##for (i in c(1:1000)) {
+##tmp1 = sample(c(1:66),30)
+##tmp2 = sample(c(67:108),30)
+##tmp.scores = PRS$gScore[c(tmp1,tmp2)]
+##tmp.groups = PRS$group[c(tmp1,tmp2)]
+##myROC = roc(response=tmp.groups, predictor=tmp.scores, smooth=T)
+##myAUCs[i] = myROC$auc
+##}
+##summary(myAUCs)
+myROC = roc(response=PRS$group, predictor=PRS$gScore, levels=c("NMD","MD"))
+myROC$specificities
+myROC$sensitivities
+pdf('md-27snps-roc-lfc.pdf')
+plot.roc(x=PRS$group, predictor=PRS$gScore, print.thres="best", print.auc=T, auc.polygon=T, grid=c(0.1,0.2), max.auc.polygon=T, legacy.axes=T)
+dev.off()
+myAUCs = {}
+for (i in c(1:1000)) {
+tmp1 = sample(c(1:66),30)
+tmp2 = sample(c(67:108),30)
+tmp.scores = PRS$gScore[c(tmp1,tmp2)]
+tmp.groups = PRS$group[c(tmp1,tmp2)]
+myROC = roc(response=tmp.groups, predictor=tmp.scores, smooth=T)
+myAUCs[i] = myROC$auc
+}
+summary(myAUCs)
+## Opreation in Linux
+setwd("C:\\Users\\11780\\Documents\\eqtl")## In Linux, Ctrl+insert is copy and Shift+Insert is paste.
+library(phenoscanner)
+topsnp=read.csv("topsnp.csv")
+rsid=topsnp[,1]
+res=phenoscanner(snpquery="rs11663816", pvalue=1E-5, r2=0.8)
+for (i in 2:length(rsid)) {
+snp=phenoscanner(snpquery=rsid[i], pvalue=0.01, r2=0.8)
+ifelse(rsid[i] != rsid[i-1],ifelse(dim(snp$results)[1]>0,res$results <- rbind(res$results, snp$results),res$results <- res$results), 
+res$results <- res$results)
+}
+write.csv(res$results, "results_phenoscanner_MD.csv", row.names=F)
+missingsnp=c("rsid")
+for (i in 2:length(rsid)) {
+snp=phenoscanner(snpquery=rsid[i], pvalue=1E-5, r2=0.8)
+ifelse(rsid[i] != rsid[i-1],ifelse(dim(snp$results)[1]>0,res$results <- rbind(res$results, snp$results),
+missingsnp <- rbind(missingsnp,rsid[i])), 
+res$results <- res$results)
+}
+###
+setwd("C:\\Users\\11780\\Documents\\eqtl")
+#effect=read.csv("asian_final.csv")
+#effect=read.csv("asian_final_refined.csv")
+raw = read.table('affy6-alleles-rsid-rmsnps-235-dosage.raw', header=T)
+effect$Beta[which(is.na(effect$Beta))] = 0
+colnames(raw) = gsub(x=colnames(raw), pattern='_[ATGC]', replacement='')
+sample_info = read.table('sample_info.txt',header=T,sep='\t')
+idtrans = read.table('idtrans.txt', as.is=T)
+idtrans$V1 = gsub(x=idtrans$V1, pattern='G', replacement='')
+sample_info$sample_id = idtrans$V2[match(sample_info$Patient_ID, idtrans$V1)]
+sample_info2 = sample_info[which(!is.na(sample_info$sample_id)),]
+
+raw2 = raw[c(1:55),c(7:dim(raw)[2])]
+rownames(raw2) = raw$FID[c(1:55)]
+effect2 = effect[match(colnames(raw2), effect$rsid),]
+myCoef = effect2$Beta
+myWeighted = apply(as.matrix(raw2), 1, "*", myCoef)
+gScores = apply(myWeighted, 2, sum, na.rm=T)
+sample_info2$gScore = gScores[match(sample_info2$Patient_ID, names(gScores))]
+sample_info2$pseudo5 = NA
+sample_info2$pseudo5[which(sample_info2$MD==1)] = 1
+sample_info2$pseudo5[which(sample_info2$MD %in% c(3,4))] = 2
+sample_info2$pseudo5 = as.factor(sample_info2$pseudo5)
+t.test(sample_info2$gScore[which(sample_info2$pseudo5==1)], sample_info2$gScore[which(sample_info2$pseudo5==2)])
+##manhattan plot and QQ plot in Linux
+data=read.csv("/home/chenll/R/md_assoc.csv")
+data2=data[which(data$CHR <=22 & data$CHR > 0),]
+str(data2) ##view the structure of the dataset
+summary(data2$CHR) ## view the statistical value of CHR
+png('~/R/man.png')
+manhattan(data2, chr="CHR", bp="BP", p="P",snp="SNP",ylim=c(0,8))
+dev.off()
+png('~/R/qq.png')
+qq(data2$P)
+dev.off()
+
+ 
+
+
+
+
+

@@ -1,0 +1,66 @@
+##step 1##
+setwd('C:\\Users\\11780\\Documents\\R”Ô—‘¡∑œ∞\\PLTMS')
+sample_info=read.table('sample_info.txt', sep='\t',header=T)
+lipid=read.csv('lipid.csv', header=T)
+colnames(lipid) <- c('Patient_ID', 'lipid') 
+lipid2=lipid[match(sample_info$Patient_ID, lipid$Patient_ID),]
+sample=cbind(sample_info, lipid2)
+dim(sample[which(sample$lipid==1),])
+dim(sample[which(sample$lipid==2),])
+sample$PLTMS=NA
+sample$PLTMS[which(sample$lipid==1)]='control'
+sample$PLTMS[which(sample$lipid==2)]='case'
+write.csv(sample,'sample_info.csv', row.names=F)
+idtrans=read.table('idtrans.txt', as.is=T)
+idtrans$V1=gsub(idtrans$V1, pattern='G', replacement='')
+sample$Patient_ID = as.character(sample$Patient_ID)
+idtrans2=idtrans[match(sample$Patient_ID, idtrans$V1),]
+sample2=cbind(sample, idtrans2)
+sample2=sample2[which(!is.na(sample2$V2)),]
+sample2=sample2[which(!is.na(sample2$PLTMS)),]
+sample2=sample2[,c(1:5,7,8,10)]
+write.csv(sample2,'sample_lipid_idtrans.csv',row.names=F)
+
+##step2##
+rm(list=ls())
+setwd('C:\\Users\\11780\\Documents\\R”Ô—‘¡∑œ∞\\PLTMS')
+expr=read.table("GeneExpression_Normalized.txt",header=T)
+sample=read.table('sample_info.txt',sep='\t', header=T)
+idtrans=read.table('idtrans.txt', as.is=T)
+idtrans$V1=gsub(idtrans$V1, pattern='G', replacement='')
+sample$Patient_ID = as.character(sample$Patient_ID)
+idtrans2=idtrans[match(sample$Patient_ID, idtrans$V1),]
+sample2=cbind(sample, idtrans2)
+sample2=sample2[which(!is.na(sample2$V2)),]
+sample2 <- sample2[,c(1:5,7)]
+colnames(sample2) <- c('Patient_ID','MD','sex','age','BMI','sample_id')
+sample2$group=NA
+sample2$group[which(sample2$MD==1)]='control'
+sample2$group[which(sample2$MD==3)]='case'
+sample2$group[which(sample2$MD==4)]='case'
+sample2=sample2[which(!is.na(sample2$group)),]
+sample <- sample2
+expr[1:5,1:5]
+expr=expr[,-2]
+expr=expr[match(sample$sample_id,expr$FID),]
+expr=expr[which(!is.na(expr$FID)),]
+for ( i in 1:length(expr$FID)) {
+	expr$FID[i]=paste('G',expr$FID[i],sep='')
+	}
+cols = expr$FID
+expr = t(as.matrix(expr[,c(2:ncol(expr))]))
+expr=expr[-1,]
+expr=expr[-1,]
+colnames(expr)=cols
+write.csv(expr, "gene_expr.csv", row.names=T)
+library(limma)
+
+design <- model.matrix(~0+factor(sample$PLTMS))
+colnames(design) = c('case','control')
+rownames(design) = colnames(expr)
+contrast.matrix  <- makeContrasts('case-control','control-case',levels=c('case','control'))
+fit <- lmFit(expr, design)
+fit2 <- contrasts.fit(fit,contrasts=contrast.matrix)
+fit2 <- eBayes(fit2)
+#fit <- eBayes(fit)
+nrDEG = topTable ( fit2, coef = 1, n=Inf)

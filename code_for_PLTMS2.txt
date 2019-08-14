@@ -1,0 +1,125 @@
+#code_for_PLTMS2#
+##step 1##
+setwd('C:\\Users\\11780\\Documents\\R”Ô—‘¡∑œ∞\\PLTMS2')
+sample=read.table('sample_info.txt', sep='\t',header=T)
+sample$PLTMS=NA
+sample$PLTMS[which(sample$MD==1)]='control'
+sample$PLTMS[which(sample$MD==2)]='missing'
+sample$PLTMS[which(sample$MD==3)]='case'
+sample$PLTMS[which(sample$MD==4)]='case'
+write.csv(sample,'sample_info.csv', row.names=F)
+idtrans=read.table('idtrans.txt', as.is=T)
+idtrans$V1=gsub(idtrans$V1, pattern='G', replacement='')
+sample$Patient_ID = as.character(sample$Patient_ID)
+idtrans2=idtrans[match(sample$Patient_ID, idtrans$V1),]
+sample2=cbind(sample, idtrans2)
+write.csv(sample2,'sample_info_idtrans.csv',row.names=F)
+
+##step 2##
+setwd('C:\\Users\\11780\\Documents\\R”Ô—‘¡∑œ∞\\PLTMS2')
+assoc=read.table('C:\\Users\\11780\\Downloads\\plink-1.07-dos\\association2.assoc',header=T)
+write.csv(assoc,'MD_assoc_OR.csv',row.names=F)
+adj=read.table('C:\\Users\\11780\\Downloads\\plink-1.07-dos\\association2.assoc.adjusted',header=T)
+write.csv(adj, 'MD_assoc_adj.csv',row.names=F)
+
+##step 3##
+setwd('C:\\Users\\11780\\Documents\\R”Ô—‘¡∑œ∞\\PLTMS2')
+expr=read.table("GeneExpression_Normalized.txt",header=T)
+sample=read.csv('sample_info_idtrans.csv')
+sample=sample[which(!is.na(sample$sample_id)),]
+sample=sample[which(sample$PLTMS != 'missing'),]
+group=sample$PLTMS
+age=sample$recepter_age
+sex=sample$recepter_sex
+expr[1:5,1:5]
+expr=expr[,-2]
+expr=expr[,-2]
+expr=expr[,-2]
+expr=expr[match(sample$sample_id,expr$FID),]
+expr=expr[which(!is.na(expr$FID)),]
+for ( i in 1:length(expr$FID)) {
+	expr$FID[i]=paste('G',expr$FID[i],sep='')
+	}
+cols = expr$FID
+expr = t(as.matrix(expr[,c(2:ncol(expr))]))
+colnames(expr)=cols
+write.csv(expr, "gene_expr.csv", row.names=T)
+library(limma)
+design <- model.matrix(~0+factor(group))
+colnames(design) = levels(factor(group))
+rownames(design) = colnames(expr)
+design
+contrast.matrix <- makeContrasts( "case-control", levels = design)
+contrast.matrix
+fit <- lmFit(expr, design)
+fit2<- contrasts.fit(fit, contrast.matrix)
+fit2 <- eBayes(fit2)
+nrDEG = topTable ( fit2, coef = 1, n=Inf)
+write.csv( nrDEG,'nrDEG.csv' )
+
+{
+	expr=read.csv('gene_expr.csv',header=T)
+	cols=colnames(expr)[-1]
+	rows=expr$X
+	expr=as.matrix(expr[,2:ncol(expr)])
+	colnames(expr)=cols
+	rownames(expr)=rows
+	sample=read.csv('sample_info_idtrans.csv')
+	sample=sample[which(!is.na(sample$sample_id)),]
+	sample=sample[which(sample$PLTMS != 'missing'),]
+	group=sample$PLTMS
+	age=sample$recepter_age
+	sex=sample$recepter_sex
+	BMI=sample$BMI
+	library(limma)
+	design <- model.matrix(~0+factor(group)+factor(sex)+factor(age))
+	colnames(design) = c(levels(factor(group)),'sex',LETTERS[1:24])
+	rownames(design) = colnames(expr)
+	design
+	contrast.matrix <- makeContrasts( "case-control", levels = c('case', 'control','sex',LETTERS[1:24]))
+	contrast.matrix
+	fit <- lmFit(expr, design)
+	fit2<- contrasts.fit(fit, contrast.matrix)
+	fit2 <- eBayes(fit2)
+	logFC_cutoff=1
+	nrDEG = topTable ( fit2, coef = 1, n=Inf)
+	nrDEG$change = as.factor(ifelse(nrDEG$P.Value < 0.05 & abs(nrDEG$logFC) > logFC_cutoff, 
+                             ifelse(nrDEG$logFC > logFC_cutoff, "UP", "DOWN"), "NOT"))
+}
+up=nrDEG[which(nrDEG$change=='UP'),]
+down=nrDEG[which(nrDEG$change=='DOWN'),]
+res=rbind(up,down)
+write.csv( nrDEG,'nrDEG.csv' )
+write.csv(res,'DE_results.csv')
+
+
+##step 5##
+setwd('C:\\Users\\11780\\Documents\\R”Ô—‘¡∑œ∞\\PLTMS')
+diabetes=read.csv('diabetes_assoc_OR.csv', header=T)
+md=read.csv('C:\\Users\\11780\\Documents\\R”Ô—‘¡∑œ∞\\PLTMS2\\MD_assoc_OR.csv',header=T)
+md=md[match(diabetes$SNP,md$SNP),]
+snp=diabetes$SNP
+code1=rep(1,length(snp))
+p1=diabetes$P
+merge1=data.frame(SNP=snp,Code=code1,P_value=p1)
+p2=md$P
+code2=rep(2, length(snp))
+merge2=data.frame(SNP=snp,Code=code2,P_value=p2)
+compare_snp=rbind(merge1,merge2)
+compare_snp=compare_snp[which(compare_snp$P_value < 1e-05),]
+compare_snp$P_value=-log10(compare_snp$P_value)
+compare_snp$type=NA
+compare_snp$type[compare_snp$Code==1]='Diabetes'
+compare_snp$type[compare_snp$Code==2]='MD'
+library(ggplot2)
+pdf('compare_snp.pdf',width=15,height=10)
+gg <- ggplot( compare_snp, aes(x=SNP, y=P_value,colour=type))+
+	  geom_point()+
+	  xlab('SNP')+
+	  ylab('-logPval')
+print(gg)
+dev.off()
+
+		
+
+
